@@ -1,2 +1,2 @@
 # dead-link-crawler
-A simple crawler that looks for dead links on a given domain.
+A simple and quite inefficient crawler that looks for dead links on a given domain.
