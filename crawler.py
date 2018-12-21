@@ -43,7 +43,7 @@ class myParser(HTMLParser):
         except ValueError:
             if not self.__url in deadURLs:
                 print()
-                print('Fant en død link:', self.__url)
+                print('Found a dead link:', self.__url)
                 deadURLs.append(self.__url)
                 self.linkWasDead = True
             self.__done = True
@@ -119,10 +119,10 @@ if shouldParseUrl(startUrl):
 
 print()
 print()
-print(len(parsedURLs), 'linker har blitt sjekket. Av de var', len(deadURLs), 'døde.')
-print('Døde linker:')
+print(len(parsedURLs), 'links have been checked. Af those,', len(deadURLs), 'were dead.')
+print('Dead links:')
 print(deadURLs)
 print()
-print('Linker som er sjekket:')
+print('Linker that were checked:')
 print(parsedURLs)
 print()
