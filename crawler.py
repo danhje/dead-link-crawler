@@ -119,7 +119,7 @@ if shouldParseUrl(startUrl):
 
 print()
 print()
-print(len(parsedURLs), 'links have been checked. Af those,', len(deadURLs), 'were dead.')
+print(len(parsedURLs), 'links have been checked. Of those,', len(deadURLs), 'were dead.')
 print('Dead links:')
 print(deadURLs)
 print()
