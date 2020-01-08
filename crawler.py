@@ -1,128 +1,109 @@
 from html.parser import HTMLParser
-from urllib.request import FancyURLopener
-from urllib.parse import urljoin
+from urllib.request import urlopen
+from urllib.parse import urljoin, urlparse
 from time import sleep
 import ssl
 
 
-parsedURLs = []
-deadURLs = []
+class MyHTMLParser(HTMLParser):
 
-
-def shouldParseUrl(url):
-    if url in parsedURLs:
-        return False
-    if 'danielhjertholm.me' not in url:
-        return False
-    if 'mailto' in url:
-        return False
-    return True
-
-# Create a subclass and override the handler methods
-class myParser(HTMLParser):
-
-    def __init__(self, url, level):
-        super(myParser, self).__init__()
-        sleep(0.1)
-        print('Checking URL', url)
-        self.__level = level
-        self.__done = False
-        self.__currentlyParsingDeadATag = False
-        self.__currentlyParsingTitleTag = False
-        self.__url = url
-        self.linkWasDead = False
-        parsedURLs.append(self.__url)
-        try:
-            opener = FancyURLopener({})
-            f = opener.open(self.__url)
-            data = f.read()
-        except ssl.SSLError:
-            return
-        except OSError:
-            return
-        except ValueError:
-            if not self.__url in deadURLs:
-                print()
-                print('Found a dead link:', self.__url)
-                deadURLs.append(self.__url)
-                self.linkWasDead = True
-            self.__done = True
-            return
-
-        try:
-            text = data.decode(errors='replace')
-        except UnicodeDecodeError:
-            pass
-            #print('This is a binary file:', self.__url)
-        else:
-            try:
-                self.feed(text)
-            except ValueError:
-                pass
-            except ssl.SSLError:
-                pass
+    def __init__(self):
+        super(MyHTMLParser, self).__init__(convert_charrefs=True)
+        self.urls = []
 
     def handle_starttag(self, tag, attrs):
-        if self.__done:
-            return
-
-        self.__currentlyParsingTitleTag = (tag == 'title')
-
-        if self.__currentlyParsingTitleTag:
-            return
-
         if (tag == 'a'):
-            url = attrs
-            for t in url:
-                if t[0] == 'href':
-                    url = t[1]
-                    url = urljoin(self.__url, url)
+            for attr in attrs:
+                if attr[0] == 'href':
+                    relativeURL = attr[1]
+                    self.urls.append(relativeURL)
 
-            if shouldParseUrl(url):
-                parser = myParser(url, level=self.__level+1)
-                if parser.linkWasDead:
-                    self.__currentlyParsingDeadATag = True
+    def clearUrls(self):
+        self.urls = []
 
-    def handle_data(self, data):
-        if self.__done:
+
+class Crawler:
+
+    def __init__(self):
+        self.checkedURLs = []
+        self.deadURLs = []
+        self.parser = MyHTMLParser()
+        self._warningColor = '\033[91m'
+        self._endColor = '\033[0m'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if exc_type:
+            print(f'exc_type: {exc_type}')
+            print(f'exc_value: {exc_value}')
+            print(f'exc_traceback: {exc_traceback}')
+
+    def _isInternal(self, domain, url):
+        return domain in url
+
+    def _appendCheckedUrl(self, url):
+        if url not in self.checkedURLs:
+            self.checkedURLs.append(url)
+
+    def _appendDeadUrl(self, url):
+        if url not in self.deadURLs:
+            self.deadURLs.append(url)
+
+    def startCrawl(self, url):
+        self.checkedURLs.append(url)
+        try:
+            with urlopen(url) as response:
+                encoding = response.info().get_charset()
+                data = response.read()
+                # headerEncoding = response.headers.get_content_charset()
+        except ssl.SSLError:
+            print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
+            self._appendDeadUrl(url)
+            return
+        except OSError:
+            print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
+            self._appendDeadUrl(url)
+            return
+        except ValueError:
+            print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
+            self._appendDeadUrl(url)
             return
 
-        if self.__currentlyParsingTitleTag:
-            if 'Not Found' in data:
-                if not self.__url in deadURLs:
-                    print()
-                    print('Found a dead link:', self.__url)
-                    deadURLs.append(self.__url)
-                    self.linkWasDead = True
-                self.__done = True
-                return
+        encoding = 'utf-8' if encoding is None else encoding  # set default
+        try:
+            self.parser.feed(data.decode("utf-8"))
+        except UnicodeDecodeError as e:
+            self.parser.feed(str(data))
 
-            self.__currentlyParsingATag = False
-            self.__currentlyParsingTitleTag = False
-            return
-
-        if self.__currentlyParsingDeadATag:
-            print('The link was found on the following page:', self.__url)
-            if data.strip() == '':
-                data = '<Link without text. Perhaps image?>'
-            print('The link had the following title:', data)
-            self.__currentlyParsingDeadATag = False
-            self.__currentlyParsingTitleTag = False
+        domain = urlparse(url).netloc
+        relativeUrlsFound = self.parser.urls
+        self.parser.clearUrls()
+        for relativeURL in relativeUrlsFound:
+            absoluteURL = urljoin(url, relativeURL)
+            if absoluteURL not in self.checkedURLs and self._isInternal(domain, absoluteURL):
+                # print(f'Checking url {absoluteURL}')
+                self.startCrawl(absoluteURL)
 
 
+if __name__ == "__main__":
 
+    # crawler = Crawler()
+    # crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm')
+    # print(f'Checked {len(crawler.checkedURLs)}, of which {len(crawler.deadURLs)} were dead.')
+    # deadUrls = '\n'.join(crawler.deadURLs)
+    # print(f'List of dead urls:\n{deadUrls}')
 
+    with Crawler() as crawler:
+        crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm')
+        print(f'{len(crawler.checkedURLs)} urls checked, of which {len(crawler.deadURLs)} were dead.')
+        deadUrls = '\n'.join(crawler.deadURLs)
+        print(f'List of dead urls:\n{deadUrls}')
 
-startUrl = 'http://danielhjertholm.me/prosjekter.htm'
-if shouldParseUrl(startUrl):
-    parser = myParser(startUrl, level=1)
-
-print()
-print()
-print(len(parsedURLs), 'links have been checked. Of those,', len(deadURLs), 'were dead.')
-print('Dead links:')
-print(deadURLs)
-print()
-print('Linker that were checked:')
-print(parsedURLs)
-print()
+# TODO:
+# make isInternal smarter. Will anser yes for https://wrongdomiain.com/rightcomain.com
+# paralell requests
+# http status codes
+# don't download binary files
+# delay
