@@ -1,5 +1,5 @@
 from html.parser import HTMLParser
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from urllib.parse import urljoin, urlparse
 from time import sleep
 import ssl
@@ -53,57 +53,57 @@ class Crawler:
 
     def startCrawl(self, url):
         self.checkedURLs.append(url)
+        contentType = None
         try:
-            with urlopen(url) as response:
-                encoding = response.info().get_charset()
-                data = response.read()
-                # headerEncoding = response.headers.get_content_charset()
-        except ssl.SSLError:
-            print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
-            self._appendDeadUrl(url)
-            return
-        except OSError:
-            print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
-            self._appendDeadUrl(url)
-            return
-        except ValueError:
+            # First, request header only
+            request = Request(url, method='HEAD')
+            with urlopen(request) as response:
+                contentType = response.headers.get_content_type()
+        except (ssl.SSLError, OSError, ValueError):
             print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
             self._appendDeadUrl(url)
             return
 
-        encoding = 'utf-8' if encoding is None else encoding  # set default
-        try:
-            self.parser.feed(data.decode("utf-8"))
-        except UnicodeDecodeError as e:
-            self.parser.feed(str(data))
+        # if (contentType and ...)
+        if contentType.lower() in ('text/html', 'text/xml', 'application/xml', 'application/xhtml+xml'):
+            # If header suggests this is a parsable content type, download and parse.
+            encoding = None
+            data = None
+            try:
+                request = Request(url)
+                with urlopen(request) as response:
+                    encoding = response.info().get_charset()
+                    data = response.read()
+            except (ssl.SSLError, OSError, ValueError):
+                print(f'{self._warningColor}Found a dead link: {url}{self._endColor}')
+                self._appendDeadUrl(url)
+                return
 
-        domain = urlparse(url).netloc
-        relativeUrlsFound = self.parser.urls
-        self.parser.clearUrls()
-        for relativeURL in relativeUrlsFound:
-            absoluteURL = urljoin(url, relativeURL)
-            if absoluteURL not in self.checkedURLs and self._isInternal(domain, absoluteURL):
-                # print(f'Checking url {absoluteURL}')
-                self.startCrawl(absoluteURL)
+            if data:
+                encoding = 'utf-8' if encoding is None else encoding  # set default
+                try:
+                    self.parser.feed(data.decode("utf-8"))
+                except UnicodeDecodeError as e:
+                    self.parser.feed(str(data))
+                domain = urlparse(url).netloc
+                relativeUrlsFound = self.parser.urls
+                self.parser.clearUrls()
+                for relativeURL in relativeUrlsFound:
+                    absoluteURL = urljoin(url, relativeURL)
+                    if absoluteURL not in self.checkedURLs and self._isInternal(domain, absoluteURL):
+                        # print(f'Checking url {absoluteURL}')
+                        self.startCrawl(absoluteURL)
 
 
 if __name__ == "__main__":
-
-    # crawler = Crawler()
-    # crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm')
-    # print(f'Checked {len(crawler.checkedURLs)}, of which {len(crawler.deadURLs)} were dead.')
-    # deadUrls = '\n'.join(crawler.deadURLs)
-    # print(f'List of dead urls:\n{deadUrls}')
-
-    with Crawler() as crawler:
-        crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm')
-        print(f'{len(crawler.checkedURLs)} urls checked, of which {len(crawler.deadURLs)} were dead.')
-        deadUrls = '\n'.join(crawler.deadURLs)
-        print(f'List of dead urls:\n{deadUrls}')
+    crawler = Crawler()
+    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm')
+    print(f'Checked {len(crawler.checkedURLs)}, of which {len(crawler.deadURLs)} were dead.')
+    deadUrls = '\n'.join(crawler.deadURLs)
+    print(f'List of dead urls:\n{deadUrls}')
 
 # TODO:
-# make isInternal smarter. Will anser yes for https://wrongdomiain.com/rightcomain.com
+# make isInternal smarter. Will anser yes for https://wrongdomiain.com/rightdomain.com
 # paralell requests
 # http status codes
-# don't download binary files
 # delay
