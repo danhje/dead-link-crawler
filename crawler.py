@@ -52,7 +52,7 @@ class Crawler:
             self.deadURLs.append(url)
 
     def startCrawl(self, url):
-        self.checkedURLs.append(url)
+        self._appendCheckedUrl(url)
         contentType = None
         try:
             # First, request header only
@@ -80,9 +80,9 @@ class Crawler:
                 return
 
             if data:
-                encoding = 'utf-8' if encoding is None else encoding  # set default
+                encoding = 'utf-8' if encoding is None else encoding  # set default encoding
                 try:
-                    self.parser.feed(data.decode("utf-8"))
+                    self.parser.feed(data.decode(encoding=encoding))
                 except UnicodeDecodeError as e:
                     self.parser.feed(str(data))
                 domain = urlparse(url).netloc
@@ -91,7 +91,6 @@ class Crawler:
                 for relativeURL in relativeUrlsFound:
                     absoluteURL = urljoin(url, relativeURL)
                     if absoluteURL not in self.checkedURLs and self._isInternal(domain, absoluteURL):
-                        # print(f'Checking url {absoluteURL}')
                         self.startCrawl(absoluteURL)
 
 
