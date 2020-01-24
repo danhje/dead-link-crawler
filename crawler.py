@@ -54,8 +54,9 @@ class Crawler:
     def startCrawl(self, url):
         self._appendCheckedUrl(url)
         contentType = None
+
+        # First, request header only
         try:
-            # First, request header only
             request = Request(url, method='HEAD')
             with urlopen(request) as response:
                 contentType = response.headers.get_content_type()
@@ -64,9 +65,8 @@ class Crawler:
             self._appendDeadUrl(url)
             return
 
-        # if (contentType and ...)
+        # If header suggests this is a parsable content type, download and parse.
         if contentType.lower() in ('text/html', 'text/xml', 'application/xml', 'application/xhtml+xml'):
-            # If header suggests this is a parsable content type, download and parse.
             encoding = None
             data = None
             try:
