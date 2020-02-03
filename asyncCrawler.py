@@ -3,6 +3,7 @@ import aiohttp
 import ssl
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
+from time import time
 
 
 class Link:
@@ -61,14 +62,32 @@ class DeadLinkCrawler:
         self._domain = None
         self._parsableContentTypes = ('text/html', 'text/xml', 'application/xml', 'application/xhtml+xml')
 
-    def startCrawl(self, url, maxSimultanousUrlFetches=10, errorText='Not Found'):
+    def startCrawl(self, url, maxSimultanousUrlFetches=10, errorText='Not Found', verbose=True):
+        self._verbose = verbose
         self._maxSimultanousUrlFetches = maxSimultanousUrlFetches
         self._errorText = errorText
         self._domain = '.'.join(urlparse(url).netloc.split('.')[-2:])
-        startLink = Link(relativeTarget=url, linkTitle='Initial URL')  # foundOn?
+        startLink = Link(relativeTarget=url, linkTitle='Initial URL')
         self._queuedLinks.append(startLink)
         self._loop = asyncio.get_event_loop()
         self._loop.run_until_complete(self._main())
+
+    def printDeadLinks(self):
+        sortedLinks = {}
+        for link in self.deadLinks:
+            if link.foundOn in sortedLinks:
+                sortedLinks[link.foundOn].append(link)
+            else:
+                sortedLinks[link.foundOn] = [link]
+        for foundOn, deadLinks in sortedLinks.items():
+            print(f'On the page {foundOn}, the following links were dead:')
+            for deadLink in deadLinks:
+                print(f'  Link title: {deadLink.linkTitle}')
+                print(f'  Link URL: {deadLink.absoluteTarget}')
+
+    @property
+    def deadLinks(self):
+        return (link for link in self.checkedLinks if link.works is False)
 
     def _linkAlreadyChecked(self, link):
         return link.absoluteTarget in (checkedLink.absoluteTarget for checkedLink in self.checkedLinks)
@@ -109,13 +128,14 @@ class DeadLinkCrawler:
     async def _main(self):
         async with aiohttp.ClientSession() as session:
             tasks = []
+            lastStatusPrintoutTime = time() - 9.0
             while True:
                 completedTasks = [task for task in tasks if task.done()]
                 tasks = [task for task in tasks if not task.done()]
 
                 for task in completedTasks:
                     parentLink = task.result()
-                    if not parentLink.works:
+                    if self._verbose and parentLink.works is False:
                         print(f'Dead link with title "{parentLink.linkTitle}" and target {parentLink.absoluteTarget} found on {parentLink.foundOn}')
                     if parentLink.targetBody:
                         self._linkSkanner.feed(parentLink.targetBody)
@@ -134,15 +154,21 @@ class DeadLinkCrawler:
                             newtask = asyncio.create_task(self._fetch(session, nextLink))
                             tasks.append(newtask)
 
+                if time() - lastStatusPrintoutTime > 10:
+                    lastStatusPrintoutTime = time()
+                    print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in crawler.checkedLinks if link.works is False])} dead.')
+                    # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxSimultanousUrlFetches links that are currently being fetched.
+
                 if len(tasks) == 0 and len(self._queuedLinks) == 0:
+                    if self._verbose:
+                        print(f'Crawl finished. URLs checked: {len(crawler.checkedLinks)}. Dead URLs found: {len([1 for link in crawler.checkedLinks if link.works is False])}')
                     break
                 await asyncio.sleep(0.01)
 
 
 if __name__ == '__main__':
     crawler = DeadLinkCrawler()
-    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm')
-    deadLinks = [link.absoluteTarget for link in crawler.checkedLinks if not link.works]
-    print(f'{len(crawler.checkedLinks)} URLs checked. Of those, {len(deadLinks)} were dead.')
-    if len(deadLinks) > 0:
-        print('Dead urls:\n' + '\n'.join(deadLinks))
+    crawler.startCrawl('https://mdg.no/', verbose=True)
+    crawler.printDeadLinks()
+    checkedLinks = crawler.checkedLinks
+    deadLinks = list(crawler.deadLinks)
