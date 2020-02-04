@@ -7,6 +7,14 @@ from time import time
 
 
 class Link:
+    """The Link class represents links.
+
+    Example:
+
+    >>> link = Link('https://domain.com')
+    >>> isinstance(link, Link)
+    True
+    """
 
     def __init__(self, relativeTarget, foundOn=None, linkTitle=None, works=None, targetBody=None):
         self.relativeTarget = relativeTarget
@@ -15,8 +23,24 @@ class Link:
         self.works = works
         self.targetBody = targetBody
 
+    def __str__(self):
+        return self.absoluteTarget
+
     @property
     def absoluteTarget(self):
+        """Return absolute URL for the link.
+
+        Example:
+
+        >>> link = Link('about', foundOn='https://domain.com/home')
+        >>> print(link.absoluteTarget)
+        https://domain.com/about
+
+        >>> link = Link('https://otherdomain.com', foundOn='https://domain.com/home')
+        >>> print(link.absoluteTarget)
+        https://otherdomain.com
+        """
+
         if self.foundOn:
             return urljoin(self.foundOn, self.relativeTarget)
         else:
@@ -24,10 +48,20 @@ class Link:
 
 
 class LinkScanner(HTMLParser):
+    """Parser that looks for links in HTML.
+
+    Example:
+
+    >>> parser = LinkScanner()
+    >>> parser.feed('<html><body><img src="smiley.gif"><a href="https://domain.com/somepage.htm">Link to some page</a></body></html>')
+    >>> linksFound = parser.popLinks()
+    >>> print(linksFound[0])
+    https://domain.com/somepage.htm
+    """
 
     def __init__(self):
         super(LinkScanner, self).__init__(convert_charrefs=True)
-        self.urls = []
+        self.links = []
         self.currentlyInATag = False
 
     def handle_starttag(self, tag, attrs):
@@ -36,23 +70,50 @@ class LinkScanner(HTMLParser):
             for attr in attrs:
                 if attr[0] == 'href':
                     newLink = Link(relativeTarget=attr[1])
-                    self.urls.append(newLink)
+                    self.links.append(newLink)
 
     def handle_data(self, data):
         if self.currentlyInATag:
-            self.urls[-1].linkTitle = data
+            self.links[-1].linkTitle = data
 
     def handle_endtag(self, tag):
         if tag == 'a':
             self.currentlyInATag = False
 
-    def popUrls(self):
-        urls = self.urls
-        self.urls = []
-        return urls
+    def popLinks(self):
+        """Return a list of links that were found during parsing.
+
+        links are of type 'Link'.
+
+        Example:
+
+        >>> parser = LinkScanner()
+        >>> parser.feed('<html><body><img src="smiley.gif"><a href="https://domain.com/somepage.htm">Link to some page</a></body></html>')
+        >>> linksFound = parser.popLinks()
+        >>> isinstance(linksFound[0], Link)
+        True
+        >>> print(linksFound[0])
+        https://domain.com/somepage.htm
+        """
+        links = self.links
+        self.links = []
+        return links
 
 
 class DeadLinkCrawler:
+    """Looks for dead (broken) links on a domain.
+
+    Example:
+
+    >>> crawler = DeadLinkCrawler()
+    >>> crawler.startCrawl('http://danielhjertholm.me', verbose=False)
+    >>> crawler.printDeadLinks()
+    No dead links have been found.
+    >>> len(crawler.checkedLinks)
+    2
+    >>> len(list(crawler.deadLinks))
+    0
+    """
 
     def __init__(self):
         self.checkedLinks = []
@@ -79,11 +140,14 @@ class DeadLinkCrawler:
                 sortedLinks[link.foundOn].append(link)
             else:
                 sortedLinks[link.foundOn] = [link]
-        for foundOn, deadLinks in sortedLinks.items():
-            print(f'On the page {foundOn}, the following links were dead:')
-            for deadLink in deadLinks:
-                print(f'  Link title: {deadLink.linkTitle}')
-                print(f'  Link URL: {deadLink.absoluteTarget}')
+        if len(sortedLinks) > 0:
+            for foundOn, deadLinks in sortedLinks.items():
+                print(f'On the page {foundOn}, the following links were dead:')
+                for deadLink in deadLinks:
+                    print(f'  Link title: {deadLink.linkTitle}')
+                    print(f'  Link URL: {deadLink.absoluteTarget}')
+        else:
+            print('No dead links have been found.')
 
     @property
     def deadLinks(self):
@@ -128,7 +192,7 @@ class DeadLinkCrawler:
     async def _main(self):
         async with aiohttp.ClientSession() as session:
             tasks = []
-            lastStatusPrintoutTime = time() - 9.0
+            lastStatusPrintoutTime = time() - 7.0
             while True:
                 completedTasks = [task for task in tasks if task.done()]
                 tasks = [task for task in tasks if not task.done()]
@@ -139,7 +203,7 @@ class DeadLinkCrawler:
                         print(f'Dead link with title "{parentLink.linkTitle}" and target {parentLink.absoluteTarget} found on {parentLink.foundOn}')
                     if parentLink.targetBody:
                         self._linkSkanner.feed(parentLink.targetBody)
-                        childLinksFound = self._linkSkanner.popUrls()
+                        childLinksFound = self._linkSkanner.popLinks()
                         self._linkSkanner.reset()
                         for childLink in childLinksFound:
                             childLink.foundOn = parentLink.absoluteTarget
@@ -161,14 +225,17 @@ class DeadLinkCrawler:
 
                 if len(tasks) == 0 and len(self._queuedLinks) == 0:
                     if self._verbose:
-                        print(f'Crawl finished. URLs checked: {len(crawler.checkedLinks)}. Dead URLs found: {len([1 for link in crawler.checkedLinks if link.works is False])}')
+                        print(f'Crawl finished. Links checked: {len(crawler.checkedLinks)}. Dead links found: {len([1 for link in crawler.checkedLinks if link.works is False])}')
                     break
                 await asyncio.sleep(0.01)
 
 
 if __name__ == '__main__':
     crawler = DeadLinkCrawler()
-    crawler.startCrawl('https://mdg.no/', verbose=True)
+    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm', maxSimultanousUrlFetches=10, verbose=False)
     crawler.printDeadLinks()
     checkedLinks = crawler.checkedLinks
     deadLinks = list(crawler.deadLinks)
+
+    import doctest
+    doctest.testmod()
