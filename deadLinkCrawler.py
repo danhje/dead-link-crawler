@@ -170,8 +170,14 @@ class DeadLinkCrawler:
                 if response.status >= 401:
                     link.works = False
                     return link
-                contentType = response.headers.get('content-type').lower()
-                parsable = any(t in contentType for t in self._parsableContentTypes)
+
+                try:
+                    contentType = response.headers.get('content-type').lower()
+                except AttributeError:  # contentType is None
+                    parsable = True
+                else:  # ContentType is not None
+                    parsable = any(t in contentType for t in self._parsableContentTypes)
+
                 if parsable:
                     async with session.get(link.absoluteTarget, ssl=self._sslContext) as response:
                         body = await response.text()
@@ -235,7 +241,7 @@ if __name__ == '__main__':
     doctest.testmod()
 
     crawler = DeadLinkCrawler()
-    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm', verbose=False)
+    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm', verbose=True)
     crawler.printDeadLinks()
     checkedLinks = crawler.checkedLinks
     deadLinks = list(crawler.deadLinks)
