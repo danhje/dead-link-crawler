@@ -66,9 +66,9 @@ class LinkScanner(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         if tag == 'a':
-            self.currentlyInATag = True
             for attr in attrs:
                 if attr[0] == 'href':
+                    self.currentlyInATag = True
                     newLink = Link(relativeTarget=attr[1])
                     self.links.append(newLink)
 
@@ -231,11 +231,11 @@ class DeadLinkCrawler:
 
 
 if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
+
     crawler = DeadLinkCrawler()
-    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm', maxSimultanousUrlFetches=10, verbose=False)
+    crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm', verbose=False)
     crawler.printDeadLinks()
     checkedLinks = crawler.checkedLinks
     deadLinks = list(crawler.deadLinks)
-
-    import doctest
-    doctest.testmod()
