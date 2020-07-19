@@ -124,6 +124,8 @@ class DeadLinkCrawler:
         self._parsableContentTypes = ('text/html', 'text/xml', 'application/xml', 'application/xhtml+xml')
 
     def startCrawl(self, url, maxSimultanousUrlFetches=10, errorText='Not Found', verbose=True):
+        """Start scanning for dead links on the given URL."""
+
         self._verbose = verbose
         self._maxSimultanousUrlFetches = maxSimultanousUrlFetches
         self._errorText = errorText
@@ -134,6 +136,8 @@ class DeadLinkCrawler:
         self._loop.run_until_complete(self._main())
 
     def printDeadLinks(self):
+        """Print out a summary of all dead links that have been found."""
+
         sortedLinks = {}
         for link in self.deadLinks:
             if link.foundOn in sortedLinks:
@@ -172,7 +176,7 @@ class DeadLinkCrawler:
                     return link
 
                 try:
-                    contentType = response.headers.get('content-type').lower()
+                    contentType = response.headers['content-type'].lower()
                 except AttributeError:  # contentType is None
                     parsable = True
                 else:  # ContentType is not None
@@ -191,7 +195,7 @@ class DeadLinkCrawler:
                 else:
                     link.works = True
                     return link
-        except Exception as e:
+        except Exception:
             link.works = False
             return link
 
