@@ -1,3 +1,4 @@
+from typing import Optional, Iterable, Generator
 import asyncio
 import aiohttp
 import ssl
@@ -16,18 +17,23 @@ class Link:
     True
     """
 
-    def __init__(self, relativeTarget, foundOn=None, linkTitle=None, works=None, targetBody=None):
+    def __init__(self,
+                 relativeTarget: str,
+                 foundOn: Optional[str] = None,
+                 linkTitle: Optional[str] = None,
+                 works: Optional[bool] = None,
+                 targetBody: Optional[str] = None) -> None:
         self.relativeTarget = relativeTarget
         self.foundOn = foundOn
         self.linkTitle = linkTitle
         self.works = works
         self.targetBody = targetBody
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.absoluteTarget
 
     @property
-    def absoluteTarget(self):
+    def absoluteTarget(self) -> str:
         """Return absolute URL for the link.
 
         Example:
@@ -59,12 +65,12 @@ class LinkScanner(HTMLParser):
     https://domain.com/somepage.htm
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(LinkScanner, self).__init__(convert_charrefs=True)
         self.links = []
         self.currentlyInATag = False
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: Iterable) -> None:
         if tag == 'a':
             for attr in attrs:
                 if attr[0] == 'href':
@@ -72,15 +78,15 @@ class LinkScanner(HTMLParser):
                     newLink = Link(relativeTarget=attr[1])
                     self.links.append(newLink)
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self.currentlyInATag:
             self.links[-1].linkTitle = data
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if tag == 'a':
             self.currentlyInATag = False
 
-    def popLinks(self):
+    def popLinks(self) -> Iterable[Link]:
         """Return a list of links that were found during parsing.
 
         links are of type 'Link'.
@@ -115,7 +121,7 @@ class DeadLinkCrawler:
     0
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.checkedLinks = []
         self._linkSkanner = LinkScanner()
         self._sslContext = ssl.SSLContext()
@@ -123,7 +129,11 @@ class DeadLinkCrawler:
         self._domain = None
         self._parsableContentTypes = ('text/html', 'text/xml', 'application/xml', 'application/xhtml+xml')
 
-    def startCrawl(self, url, maxSimultanousUrlFetches=10, errorText='Not Found', verbose=True):
+    def startCrawl(self,
+                   url: str,
+                   maxSimultanousUrlFetches: int = 10,
+                   errorText: str = 'Not Found',
+                   verbose: bool = True) -> None:
         """Start scanning for dead links on the given URL."""
 
         self._verbose = verbose
@@ -135,7 +145,7 @@ class DeadLinkCrawler:
         self._loop = asyncio.get_event_loop()
         self._loop.run_until_complete(self._main())
 
-    def printDeadLinks(self):
+    def printDeadLinks(self) -> None:
         """Print out a summary of all dead links that have been found."""
 
         sortedLinks = {}
@@ -154,21 +164,20 @@ class DeadLinkCrawler:
             print('No dead links have been found.')
 
     @property
-    def deadLinks(self):
+    def deadLinks(self) -> Generator:
         return (link for link in self.checkedLinks if link.works is False)
 
-    def _linkAlreadyChecked(self, link):
+    def _linkAlreadyChecked(self, link: Link) -> bool:
         return link.absoluteTarget in (checkedLink.absoluteTarget for checkedLink in self.checkedLinks)
 
-    def _linkAlreadyQueued(self, link):
+    def _linkAlreadyQueued(self, link: Link) -> bool:
         return link.absoluteTarget in (queuedLink.absoluteTarget for queuedLink in self._queuedLinks)
 
-    def _linkIsInternal(self, link):
+    def _linkIsInternal(self, link: Link) -> bool:
         linkDomain = '.'.join(urlparse(link.absoluteTarget).netloc.split('.')[-2:])
         return linkDomain == self._domain
 
-    async def _fetch(self, session, link):
-        assert(isinstance(link, Link))
+    async def _fetch(self, session: aiohttp.ClientSession, link: Link) -> Link:
         try:
             async with session.head(link.absoluteTarget, ssl=self._sslContext) as response:
                 if response.status >= 401:
@@ -188,10 +197,9 @@ class DeadLinkCrawler:
                         if self._errorText in body:
                             link.works = False
                             return link
-                        else:
-                            link.targetBody = body
-                            link.works = True
-                            return link
+                        link.targetBody = body
+                        link.works = True
+                        return link
                 else:
                     link.works = True
                     return link
@@ -199,7 +207,7 @@ class DeadLinkCrawler:
             link.works = False
             return link
 
-    async def _main(self):
+    async def _main(self) -> None:
         async with aiohttp.ClientSession() as session:
             tasks = []
             lastStatusPrintoutTime = time() - 7.0
@@ -242,7 +250,7 @@ class DeadLinkCrawler:
 
 if __name__ == '__main__':
     import doctest
-    doctest.testmod()
+    doctest.testmod(verbose=True)
 
     crawler = DeadLinkCrawler()
     crawler.startCrawl('http://danielhjertholm.me/prosjekter.htm', verbose=True)
