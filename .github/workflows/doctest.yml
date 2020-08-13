@@ -1,8 +1,7 @@
-name: Doctest
+name: Unit tests
 
 on:
   workflow_dispatch:
-      branches: [ master ]
   push:
     branches: [ master ]
   pull_request:
