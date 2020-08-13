@@ -14,7 +14,7 @@ class Link:
 
     >>> link = Link('https://domain.com')
     >>> isinstance(link, Link)
-    False
+    True
     """
 
     def __init__(self,
