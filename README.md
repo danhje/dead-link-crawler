@@ -12,9 +12,8 @@ pipenv install
 To start Python from within the virtual environment:
 ```
 pipenv run python
-
 ```
-To start the crawl, type
+To start the crawl and print the results:
 ```
 from deadLinkCrawler import DeadLinkCrawler
 
