@@ -238,12 +238,12 @@ class DeadLinkCrawler:
 
                 if time() - lastStatusPrintoutTime > 10:
                     lastStatusPrintoutTime = time()
-                    print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in crawler.checkedLinks if link.works is False])} dead.')
+                    print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in self.checkedLinks if link.works is False])} dead.')
                     # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxSimultanousUrlFetches links that are currently being fetched.
 
                 if len(tasks) == 0 and len(self._queuedLinks) == 0:
                     if self._verbose:
-                        print(f'Crawl finished. Links checked: {len(crawler.checkedLinks)}. Dead links found: {len([1 for link in crawler.checkedLinks if link.works is False])}')
+                        print(f'Crawl finished. Links checked: {len(self.checkedLinks)}. Dead links found: {len([1 for link in self.checkedLinks if link.works is False])}')
                     break
                 await asyncio.sleep(0.01)
 
