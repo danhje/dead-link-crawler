@@ -67,24 +67,24 @@ class LinkScanner(HTMLParser):
 
     def __init__(self) -> None:
         super(LinkScanner, self).__init__(convert_charrefs=True)
-        self.links = []
-        self.currentlyInATag = False
+        self._links = []
+        self._currentlyInATag = False
 
     def handle_starttag(self, tag: str, attrs: Iterable) -> None:
         if tag == 'a':
             for attr in attrs:
                 if attr[0] == 'href':
-                    self.currentlyInATag = True
+                    self._currentlyInATag = True
                     newLink = Link(relativeTarget=attr[1])
-                    self.links.append(newLink)
+                    self._links.append(newLink)
 
     def handle_data(self, data: str) -> None:
-        if self.currentlyInATag:
-            self.links[-1].linkTitle = data
+        if self._currentlyInATag:
+            self._links[-1].linkTitle = data
 
     def handle_endtag(self, tag: str) -> None:
         if tag == 'a':
-            self.currentlyInATag = False
+            self._currentlyInATag = False
 
     def popLinks(self) -> Iterable[Link]:
         """Return a list of links that were found during parsing.
@@ -101,8 +101,7 @@ class LinkScanner(HTMLParser):
         >>> print(linksFound[0])
         https://domain.com/somepage.htm
         """
-        links = self.links
-        self.links = []
+        links, self._links = self._links, []
         return links
 
 
@@ -148,14 +147,14 @@ class DeadLinkCrawler:
     def printDeadLinks(self) -> None:
         """Print out a summary of all dead links that have been found."""
 
-        sortedLinks = {}
+        groupedLinks = {}
         for link in self.deadLinks:
-            if link.foundOn in sortedLinks:
-                sortedLinks[link.foundOn].append(link)
+            if link.foundOn in groupedLinks:
+                groupedLinks[link.foundOn].append(link)
             else:
-                sortedLinks[link.foundOn] = [link]
-        if len(sortedLinks) > 0:
-            for foundOn, deadLinks in sortedLinks.items():
+                groupedLinks[link.foundOn] = [link]
+        if len(groupedLinks) > 0:
+            for foundOn, deadLinks in groupedLinks.items():
                 print(f'On the page {foundOn}, the following links were dead:')
                 for deadLink in deadLinks:
                     print(f'  Link title: {deadLink.linkTitle}')
@@ -191,18 +190,19 @@ class DeadLinkCrawler:
                 else:  # ContentType is not None
                     parsable = any(t in contentType for t in self._parsableContentTypes)
 
-                if parsable:
-                    async with session.get(link.absoluteTarget, ssl=self._sslContext) as response:
-                        body = await response.text()
-                        if self._errorText in body:
-                            link.works = False
-                            return link
-                        link.targetBody = body
-                        link.works = True
-                        return link
-                else:
+                if not parsable:
                     link.works = True
                     return link
+
+                async with session.get(link.absoluteTarget, ssl=self._sslContext) as response:
+                    body = await response.text()
+                    if self._errorText in body:
+                        link.works = False
+                        return link
+                    link.targetBody = body
+                    link.works = True
+                    return link
+
         except Exception:
             link.works = False
             return link
