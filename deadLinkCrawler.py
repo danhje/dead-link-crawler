@@ -122,6 +122,7 @@ class DeadLinkCrawler:
 
     def __init__(self) -> None:
         self.checkedLinks = []
+        self._tasks = []
         self._linkSkanner = LinkScanner()
         self._sslContext = ssl.SSLContext()
         self._queuedLinks = []
@@ -176,6 +177,23 @@ class DeadLinkCrawler:
         linkDomain = '.'.join(urlparse(link.absoluteTarget).netloc.split('.')[-2:])
         return linkDomain == self._domain
 
+    def _parseAndDiscardCompletedTasks(self):
+        completedTasks = [task for task in self._tasks if task.done()]
+        self._tasks = [task for task in self._tasks if not task.done()]
+
+        for task in completedTasks:
+            parentLink = task.result()
+            if self._verbose and parentLink.works is False:
+                print(f'Dead link with title "{parentLink.linkTitle}" and target {parentLink.absoluteTarget} found on {parentLink.foundOn}')
+            if parentLink.targetBody:
+                self._linkSkanner.feed(parentLink.targetBody)
+                childLinksFound = self._linkSkanner.popLinks()
+                self._linkSkanner.reset()
+                for childLink in childLinksFound:
+                    childLink.foundOn = parentLink.absoluteTarget
+                    if not self._linkAlreadyChecked(childLink) and not self._linkAlreadyQueued(childLink) and self._linkIsInternal(childLink):
+                        self._queuedLinks.append(childLink)
+
     async def _fetch(self, session: aiohttp.ClientSession, link: Link) -> Link:
         try:
             async with session.head(link.absoluteTarget, ssl=self._sslContext) as response:
@@ -209,39 +227,26 @@ class DeadLinkCrawler:
 
     async def _main(self) -> None:
         async with aiohttp.ClientSession() as session:
-            tasks = []
+            self._tasks = []
             lastStatusPrintoutTime = time() - 7.0
+            
             while True:
-                completedTasks = [task for task in tasks if task.done()]
-                tasks = [task for task in tasks if not task.done()]
+                self._parseAndDiscardCompletedTasks()
 
-                for task in completedTasks:
-                    parentLink = task.result()
-                    if self._verbose and parentLink.works is False:
-                        print(f'Dead link with title "{parentLink.linkTitle}" and target {parentLink.absoluteTarget} found on {parentLink.foundOn}')
-                    if parentLink.targetBody:
-                        self._linkSkanner.feed(parentLink.targetBody)
-                        childLinksFound = self._linkSkanner.popLinks()
-                        self._linkSkanner.reset()
-                        for childLink in childLinksFound:
-                            childLink.foundOn = parentLink.absoluteTarget
-                            if not self._linkAlreadyChecked(childLink) and not self._linkAlreadyQueued(childLink) and self._linkIsInternal(childLink):
-                                self._queuedLinks.append(childLink)
-
-                if len(tasks) < self._maxSimultanousUrlFetches and len(self._queuedLinks) > 0:
-                    for i in range(self._maxSimultanousUrlFetches - len(tasks)):
+                if len(self._tasks) < self._maxSimultanousUrlFetches and len(self._queuedLinks) > 0:
+                    for i in range(self._maxSimultanousUrlFetches - len(self._tasks)):
                         if len(self._queuedLinks) > 0:
                             nextLink = self._queuedLinks.pop(0)
                             self.checkedLinks.append(nextLink)
                             newtask = asyncio.create_task(self._fetch(session, nextLink))
-                            tasks.append(newtask)
+                            self._tasks.append(newtask)
 
                 if time() - lastStatusPrintoutTime > 10:
                     lastStatusPrintoutTime = time()
                     print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in self.checkedLinks if link.works is False])} dead.')
                     # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxSimultanousUrlFetches links that are currently being fetched.
 
-                if len(tasks) == 0 and len(self._queuedLinks) == 0:
+                if len(self._tasks) == 0 and len(self._queuedLinks) == 0:
                     if self._verbose:
                         print(f'Crawl finished. Links checked: {len(self.checkedLinks)}. Dead links found: {len([1 for link in self.checkedLinks if link.works is False])}')
                     break
