@@ -122,7 +122,6 @@ class DeadLinkCrawler:
 
     def __init__(self) -> None:
         self.checkedLinks = []
-        self._tasks = []
         self._linkSkanner = LinkScanner()
         self._sslContext = ssl.SSLContext()
         self._queuedLinks = []
@@ -177,6 +176,9 @@ class DeadLinkCrawler:
         linkDomain = '.'.join(urlparse(link.absoluteTarget).netloc.split('.')[-2:])
         return linkDomain == self._domain
 
+    def _allWorkIsDone(self):
+        return len(self._tasks) == 0 and len(self._queuedLinks) == 0
+
     def _parseAndDiscardCompletedTasks(self):
         completedTasks = [task for task in self._tasks if task.done()]
         self._tasks = [task for task in self._tasks if not task.done()]
@@ -193,6 +195,25 @@ class DeadLinkCrawler:
                     childLink.foundOn = parentLink.absoluteTarget
                     if not self._linkAlreadyChecked(childLink) and not self._linkAlreadyQueued(childLink) and self._linkIsInternal(childLink):
                         self._queuedLinks.append(childLink)
+
+    def _startAdditionalTasksFromQueue(self, session: aiohttp.ClientSession):
+        if len(self._tasks) < self._maxSimultanousUrlFetches and len(self._queuedLinks) > 0:
+            for i in range(self._maxSimultanousUrlFetches - len(self._tasks)):
+                if len(self._queuedLinks) > 0:
+                    nextLink = self._queuedLinks.pop(0)
+                    self.checkedLinks.append(nextLink)
+                    newtask = asyncio.create_task(self._fetch(session, nextLink))
+                    self._tasks.append(newtask)
+
+    def _printStatus(self):
+        try:
+            if time() - self._lastStatusPrintoutTime > 10.0:
+                print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in self.checkedLinks if link.works is False])} dead.')
+                # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxSimultanousUrlFetches links that are currently being fetched.
+                self._lastStatusPrintoutTime = time()
+        except AttributeError:
+            # If self does not have the attribute _lastStatusPrintoutTime, this is method's first run
+            self._lastStatusPrintoutTime = time()
 
     async def _fetch(self, session: aiohttp.ClientSession, link: Link) -> Link:
         try:
@@ -220,7 +241,6 @@ class DeadLinkCrawler:
                     link.targetBody = body
                     link.works = True
                     return link
-
         except Exception:
             link.works = False
             return link
@@ -228,29 +248,15 @@ class DeadLinkCrawler:
     async def _main(self) -> None:
         async with aiohttp.ClientSession() as session:
             self._tasks = []
-            lastStatusPrintoutTime = time() - 7.0
-            
-            while True:
+
+            while not self._allWorkIsDone():
                 self._parseAndDiscardCompletedTasks()
-
-                if len(self._tasks) < self._maxSimultanousUrlFetches and len(self._queuedLinks) > 0:
-                    for i in range(self._maxSimultanousUrlFetches - len(self._tasks)):
-                        if len(self._queuedLinks) > 0:
-                            nextLink = self._queuedLinks.pop(0)
-                            self.checkedLinks.append(nextLink)
-                            newtask = asyncio.create_task(self._fetch(session, nextLink))
-                            self._tasks.append(newtask)
-
-                if time() - lastStatusPrintoutTime > 10:
-                    lastStatusPrintoutTime = time()
-                    print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in self.checkedLinks if link.works is False])} dead.')
-                    # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxSimultanousUrlFetches links that are currently being fetched.
-
-                if len(self._tasks) == 0 and len(self._queuedLinks) == 0:
-                    if self._verbose:
-                        print(f'Crawl finished. Links checked: {len(self.checkedLinks)}. Dead links found: {len([1 for link in self.checkedLinks if link.works is False])}')
-                    break
+                self._startAdditionalTasksFromQueue(session)
+                self._printStatus()
                 await asyncio.sleep(0.01)
+
+            if self._verbose:
+                print(f'Crawl finished. Links checked: {len(self.checkedLinks)}. Dead links found: {len([1 for link in self.checkedLinks if link.works is False])}')
 
 
 if __name__ == '__main__':
