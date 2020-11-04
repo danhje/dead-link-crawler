@@ -5,15 +5,14 @@ verify_ssl = true
 
 [dev-packages]
 pycodestyle = "*"
-black = "*"
 
 [packages]
-aiohttp = "*"
 asyncio = "*"
 urllib3 = "*"
+aiohttp = "*"
 
 [requires]
 python_version = "3.8"
 
 [pipenv]
-allow_prereleases = true
+allow_prereleases = false
