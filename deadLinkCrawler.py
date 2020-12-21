@@ -130,13 +130,13 @@ class DeadLinkCrawler:
 
     def startCrawl(self,
                    url: str,
-                   maxSimultanousUrlFetches: int = 10,
+                   maxConcurrentRequests: int = 10,
                    errorText: str = 'Not Found',
                    verbose: bool = True) -> None:
         """Start scanning for dead links on the given URL."""
 
         self._verbose = verbose
-        self._maxSimultanousUrlFetches = maxSimultanousUrlFetches
+        self._maxConcurrentRequests = maxConcurrentRequests
         self._errorText = errorText
         self._domain = '.'.join(urlparse(url).netloc.split('.')[-2:])
         startLink = Link(relativeTarget=url, linkTitle='Initial URL')
@@ -197,8 +197,8 @@ class DeadLinkCrawler:
                         self._queuedLinks.append(childLink)
 
     def _startAdditionalTasksFromQueue(self, session: aiohttp.ClientSession):
-        if len(self._tasks) < self._maxSimultanousUrlFetches and len(self._queuedLinks) > 0:
-            for i in range(self._maxSimultanousUrlFetches - len(self._tasks)):
+        if len(self._tasks) < self._maxConcurrentRequests and len(self._queuedLinks) > 0:
+            for i in range(self._maxConcurrentRequests - len(self._tasks)):
                 if len(self._queuedLinks) > 0:
                     nextLink = self._queuedLinks.pop(0)
                     self.checkedLinks.append(nextLink)
@@ -209,7 +209,7 @@ class DeadLinkCrawler:
         try:
             if time() - self._lastStatusPrintoutTime > 10.0:
                 print(f'Status: {len(self.checkedLinks)} links checked. {len([1 for link in self.checkedLinks if link.works is False])} dead.')
-                # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxSimultanousUrlFetches links that are currently being fetched.
+                # Must use "is False" above, otherwise the default value None will evaluate as False for the ~ _maxConcurrentRequests links that are currently being fetched.
                 self._lastStatusPrintoutTime = time()
         except AttributeError:
             # If self does not have the attribute _lastStatusPrintoutTime, this is method's first run
