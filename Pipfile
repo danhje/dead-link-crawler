@@ -9,7 +9,7 @@ pycodestyle = "*"
 [packages]
 asyncio = "*"
 urllib3 = "*"
-aiohttp = "!=3.7.0,!=3.7.1,!=3.7.2"
+aiohttp = ">=3.7.4"
 beautifulsoup4 = "*"
 
 [requires]
