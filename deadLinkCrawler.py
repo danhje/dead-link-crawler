@@ -5,6 +5,10 @@ import ssl
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from time import time
+import uvloop
+
+
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 class Link:
