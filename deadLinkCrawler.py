@@ -57,14 +57,6 @@ class Link:
             return self.relativeTarget
 
 
-def find_links(html: str) -> list:
-    return [
-        Link(relativeTarget=href, linkTitle=(aTag.text or '<untitled>'))
-        for aTag in BeautifulSoup(html, features="html.parser").find_all('a')
-        if (href := aTag.attrs.get('href')) is not None
-    ]
-
-
 class DeadLinkCrawler:
     """Looks for dead (broken) links on a domain.
 
@@ -138,6 +130,14 @@ class DeadLinkCrawler:
     def _allWorkIsDone(self):
         return len(self._tasks) == 0 and len(self._queuedLinks) == 0
 
+    @staticmethod
+    def _find_links(html: str) -> list:
+        return [
+            Link(relativeTarget=href, linkTitle=(aTag.text or '<untitled>'))
+            for aTag in BeautifulSoup(html, features="html.parser").find_all('a')
+            if (href := aTag.attrs.get('href')) is not None
+        ]
+
     def _parseAndDiscardCompletedTasks(self):
         completedTasks = [task for task in self._tasks if task.done()]
         self._tasks = [task for task in self._tasks if not task.done()]
@@ -147,7 +147,7 @@ class DeadLinkCrawler:
             if self._verbose and parentLink.works is False:
                 print(f'Dead link with title "{parentLink.linkTitle}" and target {parentLink.absoluteTarget} found on {parentLink.foundOn}')
             if parentLink.targetBody:
-                childLinksFound = find_links(parentLink.targetBody)
+                childLinksFound = self._find_links(parentLink.targetBody)
                 for childLink in childLinksFound:
                     childLink.foundOn = parentLink.absoluteTarget
                     if not self._linkAlreadyChecked(childLink) and not self._linkAlreadyQueued(childLink) and self._linkIsInternal(childLink):
