@@ -3,6 +3,7 @@ import asyncio
 import aiohttp
 import ssl
 from html.parser import HTMLParser
+from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from time import time
 
@@ -53,56 +54,12 @@ class Link:
             return self.relativeTarget
 
 
-class LinkScanner(HTMLParser):
-    """Parser that looks for links in HTML.
-
-    Example:
-
-    >>> parser = LinkScanner()
-    >>> parser.feed('<html><body><img src="smiley.gif"><a href="https://domain.com/somepage.htm">Link to some page</a></body></html>')
-    >>> linksFound = parser.popLinks()
-    >>> print(linksFound[0])
-    https://domain.com/somepage.htm
-    """
-
-    def __init__(self) -> None:
-        super(LinkScanner, self).__init__(convert_charrefs=True)
-        self._links = []
-        self._currentlyInATag = False
-
-    def handle_starttag(self, tag: str, attrs: Iterable) -> None:
-        if tag == 'a':
-            for attr in attrs:
-                if attr[0] == 'href':
-                    self._currentlyInATag = True
-                    newLink = Link(relativeTarget=attr[1])
-                    self._links.append(newLink)
-
-    def handle_data(self, data: str) -> None:
-        if self._currentlyInATag:
-            self._links[-1].linkTitle = data
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag == 'a':
-            self._currentlyInATag = False
-
-    def popLinks(self) -> Iterable[Link]:
-        """Return a list of links that were found during parsing.
-
-        links are of type 'Link'.
-
-        Example:
-
-        >>> parser = LinkScanner()
-        >>> parser.feed('<html><body><img src="smiley.gif"><a href="https://domain.com/somepage.htm">Link to some page</a></body></html>')
-        >>> linksFound = parser.popLinks()
-        >>> isinstance(linksFound[0], Link)
-        True
-        >>> print(linksFound[0])
-        https://domain.com/somepage.htm
-        """
-        links, self._links = self._links, []
-        return links
+def find_links(html: str) -> list:
+    return [
+        Link(relativeTarget=href, linkTitle=(aTag.text or '<untitled>'))
+        for aTag in BeautifulSoup(html).find_all('a')
+        if (href := aTag.attrs.get('href')) is not None
+    ]
 
 
 class DeadLinkCrawler:
@@ -122,7 +79,6 @@ class DeadLinkCrawler:
 
     def __init__(self) -> None:
         self.checkedLinks = []
-        self._linkSkanner = LinkScanner()
         self._sslContext = ssl.SSLContext()
         self._queuedLinks = []
         self._domain = None
@@ -188,9 +144,7 @@ class DeadLinkCrawler:
             if self._verbose and parentLink.works is False:
                 print(f'Dead link with title "{parentLink.linkTitle}" and target {parentLink.absoluteTarget} found on {parentLink.foundOn}')
             if parentLink.targetBody:
-                self._linkSkanner.feed(parentLink.targetBody)
-                childLinksFound = self._linkSkanner.popLinks()
-                self._linkSkanner.reset()
+                childLinksFound = find_links(parentLink.targetBody)
                 for childLink in childLinksFound:
                     childLink.foundOn = parentLink.absoluteTarget
                     if not self._linkAlreadyChecked(childLink) and not self._linkAlreadyQueued(childLink) and self._linkIsInternal(childLink):
