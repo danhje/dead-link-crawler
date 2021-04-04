@@ -11,6 +11,8 @@ asyncio = "*"
 urllib3 = "*"
 aiohttp = ">=3.7.4"
 beautifulsoup4 = "*"
+cchardet = "*"
+aiodns = "*"
 
 [requires]
 python_version = "3.8"
