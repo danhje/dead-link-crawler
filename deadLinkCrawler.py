@@ -1,8 +1,7 @@
-from typing import Optional, Iterable, Generator
+from typing import Optional, Generator
 import asyncio
 import aiohttp
 import ssl
-from html.parser import HTMLParser
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from time import time
@@ -57,7 +56,7 @@ class Link:
 def find_links(html: str) -> list:
     return [
         Link(relativeTarget=href, linkTitle=(aTag.text or '<untitled>'))
-        for aTag in BeautifulSoup(html).find_all('a')
+        for aTag in BeautifulSoup(html, features="html.parser").find_all('a')
         if (href := aTag.attrs.get('href')) is not None
     ]
 
