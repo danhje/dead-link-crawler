@@ -1,8 +1,3 @@
-
-# Created by https://www.toptal.com/developers/gitignore/api/python
-# Edit at https://www.toptal.com/developers/gitignore?templates=python
-
-### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -142,4 +137,5 @@ dmypy.json
 # profiling data
 .prof
 
-# End of https://www.toptal.com/developers/gitignore/api/python
+# PyCharm / IntelliJ
+.idea/
