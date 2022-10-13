@@ -9,7 +9,7 @@ pycodestyle = "*"
 [packages]
 asyncio = "*"
 urllib3 = "*"
-aiohttp = ">=3.7.4"
+aiohttp = "*"
 beautifulsoup4 = "*"
 cchardet = "*"
 aiodns = "*"
